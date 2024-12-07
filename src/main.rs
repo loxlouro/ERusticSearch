@@ -1,9 +1,13 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::fs::{File, OpenOptions};
+use std::io::{self, BufWriter, BufReader};
 use tokio::sync::RwLock;
 use warp::Filter;
 use serde::{Serialize, Deserialize};
 use serde_json;
+
+const STORAGE_FILE: &str = "documents.db";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct Document {
@@ -19,14 +23,51 @@ struct SearchEngine {
 
 impl SearchEngine {
     fn new() -> Self {
+        let documents = match Self::load_documents() {
+            Ok(docs) => docs,
+            Err(e) => {
+                eprintln!("Ошибка загрузки документов: {}", e);
+                HashMap::new()
+            }
+        };
+        
         SearchEngine {
-            documents: Arc::new(RwLock::new(HashMap::new())),
+            documents: Arc::new(RwLock::new(documents)),
         }
     }
 
-    async fn add_document(&self, doc: Document) {
+    fn load_documents() -> io::Result<HashMap<String, Document>> {
+        match File::open(STORAGE_FILE) {
+            Ok(file) => {
+                let reader = BufReader::new(file);
+                match bincode::deserialize_from(reader) {
+                    Ok(docs) => Ok(docs),
+                    Err(_) => Ok(HashMap::new())
+                }
+            }
+            Err(_) => Ok(HashMap::new())
+        }
+    }
+
+    async fn save_documents(&self) -> io::Result<()> {
+        let docs = self.documents.read().await;
+        let file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(STORAGE_FILE)?;
+        
+        let writer = BufWriter::new(file);
+        bincode::serialize_into(writer, &*docs)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        Ok(())
+    }
+
+    async fn add_document(&self, doc: Document) -> io::Result<()> {
         let mut docs = self.documents.write().await;
         docs.insert(doc.id.clone(), doc);
+        drop(docs); // Освобождаем блокировку перед сохранением
+        self.save_documents().await
     }
 
     async fn search(&self, query: &str) -> Vec<Document> {
@@ -71,8 +112,10 @@ async fn handle_add_document(
     search_engine: Arc<SearchEngine>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     println!("Получен документ: {:?}", document);
-    search_engine.add_document(document).await;
-    Ok(warp::reply::json(&"Документ успешно добавлен"))
+    match search_engine.add_document(document).await {
+        Ok(_) => Ok(warp::reply::json(&"Документ успешно добавлен")),
+        Err(e) => Err(warp::reject::custom(StorageError(e)))
+    }
 }
 
 async fn handle_search(
@@ -84,12 +127,19 @@ async fn handle_search(
     Ok(warp::reply::json(&results))
 }
 
+#[derive(Debug)]
+struct StorageError(io::Error);
+impl warp::reject::Reject for StorageError {}
+
 async fn handle_rejection(err: warp::Rejection) -> Result<impl warp::Reply, std::convert::Infallible> {
     let message = if err.is_not_found() {
         "Путь не найден"
     } else if let Some(e) = err.find::<warp::filters::body::BodyDeserializeError>() {
         println!("Ошибка десериализации: {:?}", e);
         "Неверный формат JSON"
+    } else if let Some(e) = err.find::<StorageError>() {
+        println!("Ошибка сохранения: {:?}", e);
+        "Ошибка сохранения документа"
     } else {
         "Внутренняя ошибка сервера"
     };
