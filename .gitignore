@@ -1,2 +1,6 @@
 /target
+**/*.rs.bk
 *.db
+Cargo.lock
+.idea/
+.vscode/
