@@ -3,6 +3,8 @@ mod handlers;
 mod models;
 mod error;
 mod config;
+#[cfg(test)]
+mod tests;
 
 use handlers::{handle_add_document, handle_search, handle_rejection};
 use models::SearchEngine;
