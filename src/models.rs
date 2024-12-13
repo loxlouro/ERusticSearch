@@ -130,4 +130,13 @@ impl SearchEngine {
             .filter_map(|id| docs.get(&id).cloned())
             .collect())
     }
+
+    // TODO: Реализовать поиск по метаданным
+    // Примеры запросов:
+    // - category:books
+    // - author:"John Doe"
+    // - type:article AND content:rust
+    pub async fn search_with_metadata(&self, query: &str, fields: &[&str]) -> Result<Vec<Document>> {
+        unimplemented!("Search with metadata not implemented yet");
+    }
 } 

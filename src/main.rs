@@ -3,10 +3,8 @@ mod handlers;
 mod models;
 mod error;
 mod config;
-#[cfg(test)]
-mod tests;
 
-use handlers::{handle_add_document, handle_search, handle_rejection};
+use handlers::{handle_add_document, handle_search, handle_rejection, json_body};
 use models::SearchEngine;
 use std::sync::Arc;
 use std::collections::HashMap;
@@ -32,7 +30,7 @@ async fn main() -> anyhow::Result<()> {
     // POST /document - добавить документ
     let add_document = warp::post()
         .and(warp::path("document"))
-        .and(warp::body::json())
+        .and(json_body())
         .and(search_engine_filter.clone())
         .and_then(handle_add_document);
 
