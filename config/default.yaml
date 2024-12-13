@@ -1,0 +1,7 @@
+server:
+  host: "127.0.0.1"
+  port: 3030
+
+storage:
+  data_file: "data/documents.db"
+  index_path: "data/search_index" 
