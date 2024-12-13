@@ -84,6 +84,14 @@ impl SearchIndex {
         
         Ok(results)
     }
+
+    /// Закрывает индекс и освобождает ресурсы
+    #[allow(dead_code)]
+    pub async fn close(&self) -> Result<()> {
+        let mut writer = self.writer.write().await;
+        writer.commit()?;
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -131,12 +139,109 @@ impl SearchEngine {
             .collect())
     }
 
-    // TODO: Реализовать поиск по метаданным
-    // Примеры запросов:
-    // - category:books
-    // - author:"John Doe"
-    // - type:article AND content:rust
-    pub async fn search_with_metadata(&self, query: &str, fields: &[&str]) -> Result<Vec<Document>> {
+    /// Поиск по метаданным (будущая реализация)
+    #[allow(dead_code)]
+    pub async fn search_with_metadata(&self, _query: &str, _fields: &[&str]) -> Result<Vec<Document>> {
+        // TODO: Реализовать следующую функциональность:
+        // 1. Парсинг запроса для извлечения полей и значений
+        // 2. Поиск по индексу с учетом метаданных
+        // 3. Фильтрация результатов по метаданным
+        // 4. Ранжирование результатов
         unimplemented!("Search with metadata not implemented yet");
+    }
+
+    /// Добавляет поле метаданных в индекс
+    #[allow(dead_code)]
+    async fn add_metadata_field(&self, _field_name: &str) -> Result<()> {
+        // TODO: Реализовать добавление нового поля в схему индекса
+        unimplemented!("Adding metadata fields not implemented yet");
+    }
+
+    /// Обновляет схему индекса для поддержки новых полей метаданных
+    #[allow(dead_code)]
+    async fn update_index_schema(&self) -> Result<()> {
+        // TODO: Реализовать обновление схемы индекса
+        unimplemented!("Schema updates not implemented yet");
+    }
+
+    /// Закрывает движок и освобождает ресурсы
+    #[allow(dead_code)]
+    pub async fn close(&self) -> Result<()> {
+        self.search_index.close().await?;
+        Ok(())
+    }
+}
+
+// Добавим тесты для внутренней логики
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn create_test_config() -> Config {
+        let temp_dir = tempdir().unwrap();
+        Config {
+            server: crate::config::ServerConfig {
+                host: "127.0.0.1".parse().unwrap(),
+                port: 3030,
+            },
+            storage: crate::config::StorageConfig {
+                data_file: temp_dir.path().join("test_data.db").to_str().unwrap().to_string(),
+                index_path: temp_dir.path().join("test_index").to_str().unwrap().to_string(),
+            },
+        }
+    }
+
+    #[tokio::test]
+    async fn test_engine_creation() {
+        let config = create_test_config();
+        let engine = SearchEngine::new(&config).unwrap();
+        assert!(engine.documents.read().await.is_empty());
+        engine.close().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_document_persistence() {
+        let config = create_test_config();
+        {
+            let engine = SearchEngine::new(&config).unwrap();
+
+            let doc = Document {
+                id: "test1".to_string(),
+                content: "test content".to_string(),
+                metadata: HashMap::new(),
+            };
+
+            engine.add_document(doc.clone()).await.unwrap();
+            
+            // Закрываем первый экземпляр движка
+            engine.close().await.unwrap();
+        }
+        
+        // Теперь создаем новый экземпляр
+        let engine2 = SearchEngine::new(&config).unwrap();
+        let docs = engine2.documents.read().await;
+        assert!(docs.contains_key("test1"));
+        let doc = docs.get("test1").unwrap();
+        assert_eq!(doc.content, "test content");
+        
+        // Закрываем второй экземпляр
+        engine2.close().await.unwrap();
+    }
+
+    // Добавим тест для проверки корректного закрытия
+    #[tokio::test]
+    async fn test_engine_close_and_reopen() {
+        let config = create_test_config();
+        
+        // Создаем и закрываем первый экземпляр
+        {
+            let engine = SearchEngine::new(&config).unwrap();
+            engine.close().await.unwrap();
+        }
+
+        // Должны суметь создать новый экземпляр
+        let engine2 = SearchEngine::new(&config).unwrap();
+        engine2.close().await.unwrap();
     }
 } 
