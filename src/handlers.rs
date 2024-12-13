@@ -1,9 +1,35 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use warp::{Reply, Rejection};
+use warp::{Reply, Rejection, Filter, filters::BoxedFilter};
 use crate::models::{SearchEngine, Document};
 use crate::error::StorageError;
 use serde_json;
+
+// Создаем пользовательскую ошибку для десериализации
+#[derive(Debug)]
+pub struct JsonError {
+    message: String,
+}
+
+impl warp::reject::Reject for JsonError {}
+
+// Создаем фильтр для обработки JSON с пользовательской обработкой ошибок
+pub fn json_body() -> BoxedFilter<(Document,)> {
+    warp::body::content_length_limit(1024 * 16)
+        .and(warp::body::json())
+        .map(|doc: Document| doc)
+        .or_else(|rejection: Rejection| async move {
+            if let Some(error) = rejection.find::<warp::filters::body::BodyDeserializeError>() {
+                let message = error.to_string()
+                    .replace("Request body deserialize error: ", "")
+                    .replace(" at line 1 column 40", "");
+                Err(warp::reject::custom(JsonError { message }))
+            } else {
+                Err(rejection)
+            }
+        })
+        .boxed()
+}
 
 pub async fn handle_add_document(
     document: Document,
@@ -47,25 +73,46 @@ pub async fn handle_search(
 }
 
 pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, std::convert::Infallible> {
-    let (code, message) = if err.is_not_found() {
-        (warp::http::StatusCode::NOT_FOUND, "Путь не найден")
-    } else if let Some(e) = err.find::<warp::filters::body::BodyDeserializeError>() {
-        tracing::error!("Ошибка десериализации: {:?}", e);
-        (warp::http::StatusCode::BAD_REQUEST, "Неверный формат JSON")
+    let (code, message): (warp::http::StatusCode, String) = if err.is_not_found() {
+        (warp::http::StatusCode::NOT_FOUND, "Путь не найден".to_string())
+    } else if let Some(e) = err.find::<JsonError>() {
+        tracing::error!("Ошибка JSON: {:?}", e);
+        (
+            warp::http::StatusCode::BAD_REQUEST,
+            e.message.clone()
+        )
     } else if let Some(e) = err.find::<StorageError>() {
         tracing::error!("Ошибка хранилища: {:?}", e);
-        (warp::http::StatusCode::INTERNAL_SERVER_ERROR, "Ошибка сервера")
+        (
+            warp::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Ошибка сервера".to_string()
+        )
     } else {
         tracing::error!("Необработанная ошибка: {:?}", err);
-        (warp::http::StatusCode::INTERNAL_SERVER_ERROR, "Внутренняя ошибка сервера")
+        (
+            warp::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Внутренняя ошибка сервера".to_string()
+        )
     };
 
-    Ok(warp::reply::with_status(
-        warp::reply::json(&serde_json::json!({
-            "status": "error",
-            "message": message
-        })),
-        code,
-    ))
+    let error_json = serde_json::json!({
+        "status": "error",
+        "message": message,
+        "code": code.as_u16(),
+        "error_type": match code {
+            warp::http::StatusCode::BAD_REQUEST => "validation_error",
+            warp::http::StatusCode::NOT_FOUND => "not_found",
+            _ => "internal_error"
+        }
+    });
+
+    let mut response = warp::reply::Response::new(serde_json::to_string(&error_json).unwrap().into());
+    *response.status_mut() = code;
+    response.headers_mut().insert(
+        "content-type",
+        warp::http::header::HeaderValue::from_static("application/json"),
+    );
+
+    Ok(response)
 }
  
