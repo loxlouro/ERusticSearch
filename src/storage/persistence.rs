@@ -1,8 +1,7 @@
-use crate::models::Document;
+use crate::core::document::Document;
 use anyhow::Result;
 use std::collections::HashMap;
-use std::fs;
-use std::fs::{File, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter};
 use std::path::Path;
 
