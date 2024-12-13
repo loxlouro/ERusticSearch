@@ -1,43 +1,44 @@
-use rust_search::{api::routes::create_routes, common::config::Config, SearchEngine};
+use rust_search::{api::routes::search_routes, common::config::Config, core::search::SearchEngine};
+use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::signal::ctrl_c;
+use tracing::{error, info};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
     let config = Config::load()?;
-    tracing::info!("Загружена конфигурация: {:?}", config);
+    info!("Loaded configuration: {:?}", config);
 
-    let search_engine = SearchEngine::new(&config)?;
-    let search_engine = Arc::new(search_engine);
-    let search_engine_clone = search_engine.clone();
+    let engine = Arc::new(SearchEngine::new(&config)?);
+    info!("Search engine initialized");
 
-    let routes = create_routes(search_engine);
+    let addr = SocketAddr::new(config.server.host, config.server.port);
+    let routes = search_routes(engine);
 
-    let addr = (config.server.host, config.server.port);
-    tracing::info!(
-        "Сервер запущен на http://{}:{}",
-        config.server.host,
-        config.server.port
-    );
+    info!("Starting server on {}", addr);
 
-    let (_, _) = tokio::join!(
-        async move {
-            match ctrl_c().await {
-                Ok(()) => {
-                    tracing::info!("Получен сигнал завершения, закрываем движок...");
-                    if let Err(e) = search_engine_clone.close().await {
-                        tracing::error!("Ошибка при закрытии дви��ка: {}", e);
-                    }
-                }
-                Err(err) => {
-                    tracing::error!("Ошибка при ожидании Ctrl+C: {}", err);
-                }
+    let server = warp::serve(routes).run(addr);
+    let shutdown = async {
+        match ctrl_c().await {
+            Ok(()) => {
+                info!("Shutdown signal received, stopping server...");
             }
-        },
-        warp::serve(routes).run(addr)
-    );
+            Err(err) => {
+                error!("Error listening for shutdown signal: {}", err);
+            }
+        }
+    };
+
+    tokio::select! {
+        _ = server => {
+            info!("Server stopped");
+        }
+        _ = shutdown => {
+            info!("Shutting down...");
+        }
+    }
 
     Ok(())
 }

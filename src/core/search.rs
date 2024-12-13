@@ -1,7 +1,7 @@
 use super::document::Document;
 use super::index::SearchIndex;
 use crate::common::config::Config;
-use crate::storage;
+use crate::storage::persistence;
 use anyhow::Result;
 use std::collections::HashMap;
 use std::ops::Deref;
@@ -17,7 +17,7 @@ pub struct SearchEngine {
 
 impl SearchEngine {
     pub fn new(config: &Config) -> Result<Self> {
-        let documents = match storage::persistence::load_documents(&config.storage.data_file) {
+        let documents = match persistence::load_documents(&config.storage.data_file) {
             Ok(docs) => docs,
             Err(e) => {
                 tracing::error!("Ошибка загрузки документов: {}", e);
@@ -25,7 +25,7 @@ impl SearchEngine {
             }
         };
 
-        let search_index = SearchIndex::new(config)?;
+        let search_index = SearchIndex::new(&config.storage.index_path)?;
 
         Ok(SearchEngine {
             documents: Arc::new(RwLock::new(documents)),
@@ -39,7 +39,7 @@ impl SearchEngine {
 
         let mut docs = self.documents.write().await;
         docs.insert(doc.id.clone(), doc);
-        storage::persistence::save_documents(docs.deref(), &self.config.storage.data_file).await?;
+        persistence::save_documents(docs.deref(), &self.config.storage.data_file).await?;
 
         Ok(())
     }
@@ -56,6 +56,30 @@ impl SearchEngine {
 
     pub async fn close(&self) -> Result<()> {
         self.search_index.close().await?;
+        Ok(())
+    }
+
+    pub async fn search_with_metadata(
+        &self,
+        query: &str,
+        fields: &[&str],
+    ) -> Result<Vec<Document>> {
+        let ids = self.search_index.search_with_metadata(query, fields)?;
+        let docs = self.documents.read().await;
+
+        Ok(ids
+            .into_iter()
+            .filter_map(|id| docs.get(&id).cloned())
+            .collect())
+    }
+
+    pub async fn add_metadata_field(&self, field_name: &str) -> Result<()> {
+        self.search_index.add_metadata_field(field_name).await?;
+        Ok(())
+    }
+
+    pub async fn update_index_schema(&self) -> Result<()> {
+        self.search_index.update_schema().await?;
         Ok(())
     }
 }
