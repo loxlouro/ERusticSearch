@@ -19,6 +19,8 @@ impl SearchIndex {
         let mut schema_builder = Schema::builder();
         let _id_field = schema_builder.add_text_field("id", TEXT | STORED);
         let _content_field = schema_builder.add_text_field("content", TEXT | STORED);
+        let _author_field = schema_builder.add_text_field("author", TEXT | STORED);
+        let _type_field = schema_builder.add_text_field("type", TEXT | STORED);
         let schema = schema_builder.build();
 
         fs::create_dir_all(index_path)?;
@@ -44,6 +46,12 @@ impl SearchIndex {
 
         tantivy_doc.add_text(id_field, &doc.id);
         tantivy_doc.add_text(content_field, &doc.content);
+
+        for (key, value) in &doc.metadata {
+            if let Some(field) = self.schema.get_field(key) {
+                tantivy_doc.add_text(field, value);
+            }
+        }
 
         let mut writer = self.writer.write().await;
         writer.add_document(tantivy_doc)?;
@@ -75,6 +83,56 @@ impl SearchIndex {
     }
 
     pub async fn close(&self) -> Result<()> {
+        let mut writer = self.writer.write().await;
+        writer.commit()?;
+        Ok(())
+    }
+
+    pub fn search_with_metadata(&self, query: &str, fields: &[&str]) -> Result<Vec<String>> {
+        let reader = self.index.reader()?;
+        let searcher = reader.searcher();
+        let content_field = self.schema.get_field("content").unwrap();
+
+        let mut search_fields = vec![content_field];
+        for field in fields {
+            if let Some(field) = self.schema.get_field(field) {
+                search_fields.push(field);
+            }
+        }
+
+        let query_parser = tantivy::query::QueryParser::for_index(&self.index, search_fields);
+        let query = query_parser.parse_query(query)?;
+
+        let top_docs = searcher.search(&query, &tantivy::collector::TopDocs::with_limit(10))?;
+
+        let mut results = Vec::new();
+        for (_score, doc_address) in top_docs {
+            let retrieved_doc = searcher.doc(doc_address)?;
+            let id_field = self.schema.get_field("id").unwrap();
+            if let Some(id) = retrieved_doc.get_first(id_field) {
+                results.push(id.as_text().unwrap().to_string());
+            }
+        }
+
+        Ok(results)
+    }
+
+    pub async fn add_metadata_field(&self, field_name: &str) -> Result<()> {
+        let mut writer = self.writer.write().await;
+        let mut schema_builder = Schema::builder();
+
+        for (_field, field_entry) in self.schema.fields() {
+            schema_builder.add_field(field_entry.clone());
+        }
+
+        schema_builder.add_text_field(field_name, TEXT | STORED);
+        schema_builder.build();
+
+        writer.commit()?;
+        Ok(())
+    }
+
+    pub async fn update_schema(&self) -> Result<()> {
         let mut writer = self.writer.write().await;
         writer.commit()?;
         Ok(())
