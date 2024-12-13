@@ -14,29 +14,23 @@ use tokio::signal::ctrl_c;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Инициализация логирования
     tracing_subscriber::fmt::init();
 
-    // Загрузка конфигурации
     let config = Config::load()?;
     tracing::info!("Загружена конфигурация: {:?}", config);
 
-    // Инициализация поискового движка
     let search_engine = SearchEngine::new(&config)?;
     let search_engine = Arc::new(search_engine);
     let search_engine_clone = search_engine.clone();
 
-    // Роуты для API
     let search_engine_filter = warp::any().map(move || search_engine.clone());
 
-    // POST /document - добавить документ
     let add_document = warp::post()
         .and(warp::path("document"))
         .and(json_body())
         .and(search_engine_filter.clone())
         .and_then(handle_add_document);
 
-    // GET /search?q=query - поиск документов
     let search = warp::get()
         .and(warp::path("search"))
         .and(warp::query::<HashMap<String, String>>())
@@ -50,10 +44,8 @@ async fn main() -> anyhow::Result<()> {
     let addr = (config.server.host, config.server.port);
     tracing::info!("Сервер запущен на http://{}:{}", config.server.host, config.server.port);
     
-    // Запускаем сервер и обработчик сигналов в параллельных задачах
     let (_, _) = tokio::join!(
         async move {
-            // Ожидаем Ctrl+C
             match ctrl_c().await {
                 Ok(()) => {
                     tracing::info!("Получен сигнал завершения, закрываем движок...");
