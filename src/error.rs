@@ -7,7 +7,7 @@ pub struct StorageError(pub AnyhowError);
 
 impl fmt::Display for StorageError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Ошибка хранилища: {}", self.0)
+        write!(f, "Storage error: {}", self.0)
     }
 }
 

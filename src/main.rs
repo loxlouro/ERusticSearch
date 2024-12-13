@@ -1,16 +1,16 @@
-mod storage;
+mod config;
+mod error;
 mod handlers;
 mod models;
-mod error;
-mod config;
+mod storage;
 
-use handlers::{handle_add_document, handle_search, handle_rejection, json_body};
-use models::SearchEngine;
-use std::sync::Arc;
-use std::collections::HashMap;
-use warp::Filter;
 use config::Config;
+use handlers::{handle_add_document, handle_rejection, handle_search, json_body};
+use models::SearchEngine;
+use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::signal::ctrl_c;
+use warp::Filter;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -37,13 +37,15 @@ async fn main() -> anyhow::Result<()> {
         .and(search_engine_filter.clone())
         .and_then(handle_search);
 
-    let routes = add_document
-        .or(search)
-        .recover(handle_rejection);
+    let routes = add_document.or(search).recover(handle_rejection);
 
     let addr = (config.server.host, config.server.port);
-    tracing::info!("Сервер запущен на http://{}:{}", config.server.host, config.server.port);
-    
+    tracing::info!(
+        "Сервер запущен на http://{}:{}",
+        config.server.host,
+        config.server.port
+    );
+
     let (_, _) = tokio::join!(
         async move {
             match ctrl_c().await {
