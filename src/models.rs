@@ -1,16 +1,16 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::ops::Deref;
-use tokio::sync::RwLock;
-use serde::{Serialize, Deserialize};
-use tantivy::{
-    schema::{Schema, TEXT, STORED},
-    Index, IndexWriter, Document as TantivyDoc,
-};
-use crate::storage;
 use crate::config::Config;
+use crate::storage;
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
+use std::ops::Deref;
+use std::sync::Arc;
+use tantivy::{
+    schema::{Schema, STORED, TEXT},
+    Document as TantivyDoc, Index, IndexWriter,
+};
+use tokio::sync::RwLock;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Document {
@@ -67,12 +67,12 @@ impl SearchIndex {
         let reader = self.index.reader()?;
         let searcher = reader.searcher();
         let content_field = self.schema.get_field("content").unwrap();
-        
+
         let query_parser = tantivy::query::QueryParser::for_index(&self.index, vec![content_field]);
         let query = query_parser.parse_query(query)?;
-        
+
         let top_docs = searcher.search(&query, &tantivy::collector::TopDocs::with_limit(10))?;
-        
+
         let mut results = Vec::new();
         for (_score, doc_address) in top_docs {
             let retrieved_doc = searcher.doc(doc_address)?;
@@ -81,7 +81,7 @@ impl SearchIndex {
                 results.push(id.as_text().unwrap().to_string());
             }
         }
-        
+
         Ok(results)
     }
 
@@ -111,7 +111,7 @@ impl SearchEngine {
         };
 
         let search_index = SearchIndex::new(config)?;
-        
+
         Ok(SearchEngine {
             documents: Arc::new(RwLock::new(documents)),
             search_index: Arc::new(search_index),
@@ -121,25 +121,30 @@ impl SearchEngine {
 
     pub async fn add_document(&self, doc: Document) -> Result<()> {
         self.search_index.add_document(&doc).await?;
-        
+
         let mut docs = self.documents.write().await;
         docs.insert(doc.id.clone(), doc);
         storage::save_documents(docs.deref(), &self.config.storage.data_file).await?;
-        
+
         Ok(())
     }
 
     pub async fn search(&self, query: &str) -> Result<Vec<Document>> {
         let ids = self.search_index.search(query)?;
         let docs = self.documents.read().await;
-        
-        Ok(ids.into_iter()
+
+        Ok(ids
+            .into_iter()
             .filter_map(|id| docs.get(&id).cloned())
             .collect())
     }
 
     #[allow(dead_code)]
-    pub async fn search_with_metadata(&self, _query: &str, _fields: &[&str]) -> Result<Vec<Document>> {
+    pub async fn search_with_metadata(
+        &self,
+        _query: &str,
+        _fields: &[&str],
+    ) -> Result<Vec<Document>> {
         unimplemented!("Search with metadata not implemented yet");
     }
 
@@ -173,8 +178,18 @@ mod tests {
                 port: 3030,
             },
             storage: crate::config::StorageConfig {
-                data_file: temp_dir.path().join("test_data.db").to_str().unwrap().to_string(),
-                index_path: temp_dir.path().join("test_index").to_str().unwrap().to_string(),
+                data_file: temp_dir
+                    .path()
+                    .join("test_data.db")
+                    .to_str()
+                    .unwrap()
+                    .to_string(),
+                index_path: temp_dir
+                    .path()
+                    .join("test_index")
+                    .to_str()
+                    .unwrap()
+                    .to_string(),
             },
         }
     }
@@ -202,20 +217,20 @@ mod tests {
             engine.add_document(doc.clone()).await.unwrap();
             engine.close().await.unwrap();
         }
-        
+
         let engine2 = SearchEngine::new(&config).unwrap();
         let docs = engine2.documents.read().await;
         assert!(docs.contains_key("test1"));
         let doc = docs.get("test1").unwrap();
         assert_eq!(doc.content, "test content");
-        
+
         engine2.close().await.unwrap();
     }
 
     #[tokio::test]
     async fn test_engine_close_and_reopen() {
         let config = create_test_config();
-        
+
         {
             let engine = SearchEngine::new(&config).unwrap();
             engine.close().await.unwrap();
@@ -224,4 +239,4 @@ mod tests {
         let engine2 = SearchEngine::new(&config).unwrap();
         engine2.close().await.unwrap();
     }
-} 
+}

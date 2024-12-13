@@ -1,6 +1,6 @@
+use anyhow::Error as AnyhowError;
 use std::fmt;
 use warp::reject;
-use anyhow::Error as AnyhowError;
 
 #[derive(Debug)]
 pub struct StorageError(pub AnyhowError);
@@ -17,4 +17,4 @@ impl From<AnyhowError> for StorageError {
     fn from(err: AnyhowError) -> Self {
         StorageError(err)
     }
-} 
+}

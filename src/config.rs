@@ -28,4 +28,4 @@ impl Config {
 
         Ok(builder.build()?.try_deserialize()?)
     }
-} 
+}

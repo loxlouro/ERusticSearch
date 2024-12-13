@@ -1,9 +1,9 @@
-use std::convert::Infallible;
-use warp::{Filter, Rejection, Reply};
-use warp::filters::BoxedFilter;
-use serde_json::json;
 use crate::models::{Document, SearchEngine};
+use serde_json::json;
+use std::convert::Infallible;
 use std::sync::Arc;
+use warp::filters::BoxedFilter;
+use warp::{Filter, Rejection, Reply};
 
 #[derive(Debug)]
 struct JsonError {
@@ -92,4 +92,3 @@ pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> 
         warp::http::StatusCode::from_u16(code).unwrap(),
     ))
 }
- 
