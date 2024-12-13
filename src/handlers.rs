@@ -1,9 +1,9 @@
-use std::convert::Infallible;
-use warp::{Filter, Rejection, Reply};
-use warp::filters::BoxedFilter;
-use serde_json::json;
 use crate::models::{Document, SearchEngine};
+use serde_json::json;
+use std::convert::Infallible;
 use std::sync::Arc;
+use warp::filters::BoxedFilter;
+use warp::{Filter, Rejection, Reply};
 
 #[derive(Debug)]
 struct JsonError {
@@ -18,7 +18,8 @@ pub fn json_body() -> BoxedFilter<(Document,)> {
         .map(|doc: Document| doc)
         .or_else(|rejection: Rejection| async move {
             if let Some(error) = rejection.find::<warp::filters::body::BodyDeserializeError>() {
-                let message = error.to_string()
+                let message = error
+                    .to_string()
                     .replace("Request body deserialize error: ", "")
                     .replace(" at line 1 column 40", "");
                 Err(warp::reject::custom(JsonError { message }))
@@ -29,7 +30,10 @@ pub fn json_body() -> BoxedFilter<(Document,)> {
         .boxed()
 }
 
-pub async fn handle_add_document(doc: Document, engine: Arc<SearchEngine>) -> Result<impl Reply, Rejection> {
+pub async fn handle_add_document(
+    doc: Document,
+    engine: Arc<SearchEngine>,
+) -> Result<impl Reply, Rejection> {
     match engine.add_document(doc).await {
         Ok(_) => Ok(warp::reply::with_status(
             warp::reply::json(&json!({
@@ -48,9 +52,12 @@ pub async fn handle_add_document(doc: Document, engine: Arc<SearchEngine>) -> Re
     }
 }
 
-pub async fn handle_search(params: std::collections::HashMap<String, String>, engine: Arc<SearchEngine>) -> Result<impl Reply, Rejection> {
+pub async fn handle_search(
+    params: std::collections::HashMap<String, String>,
+    engine: Arc<SearchEngine>,
+) -> Result<impl Reply, Rejection> {
     let query = params.get("q").cloned().unwrap_or_default();
-    
+
     match engine.search(&query).await {
         Ok(results) => Ok(warp::reply::json(&json!({
             "status": "success",
@@ -82,7 +89,6 @@ pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> 
             "error_type": error_type,
             "message": message
         })),
-        warp::http::StatusCode::from_u16(code).unwrap()
+        warp::http::StatusCode::from_u16(code).unwrap(),
     ))
 }
- 
