@@ -1,5 +1,4 @@
 use super::document::Document;
-use crate::common::config::Config;
 use anyhow::Result;
 use std::fs;
 use std::sync::Arc;
@@ -16,17 +15,17 @@ pub struct SearchIndex {
 }
 
 impl SearchIndex {
-    pub fn new(config: &Config) -> Result<Self> {
+    pub fn new(index_path: &str) -> Result<Self> {
         let mut schema_builder = Schema::builder();
         let _id_field = schema_builder.add_text_field("id", TEXT | STORED);
         let _content_field = schema_builder.add_text_field("content", TEXT | STORED);
         let schema = schema_builder.build();
 
-        fs::create_dir_all(&config.storage.index_path)?;
+        fs::create_dir_all(index_path)?;
 
-        let index = match Index::open_in_dir(&config.storage.index_path) {
+        let index = match Index::open_in_dir(index_path) {
             Ok(index) => index,
-            Err(_) => Index::create_in_dir(&config.storage.index_path, schema.clone())?,
+            Err(_) => Index::create_in_dir(index_path, schema.clone())?,
         };
 
         let writer = index.writer(50_000_000)?;

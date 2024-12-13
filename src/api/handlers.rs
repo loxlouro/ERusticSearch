@@ -1,9 +1,35 @@
-use crate::core::{document::Document, search::SearchEngine};
+use crate::core::document::Document;
+use crate::core::search::SearchEngine;
 use serde_json::json;
-use std::collections::HashMap;
 use std::convert::Infallible;
 use std::sync::Arc;
-use warp::{Rejection, Reply};
+use warp::filters::BoxedFilter;
+use warp::{Filter, Rejection, Reply};
+
+#[derive(Debug)]
+struct JsonError {
+    message: String,
+}
+
+impl warp::reject::Reject for JsonError {}
+
+pub fn json_body() -> BoxedFilter<(Document,)> {
+    warp::body::content_length_limit(1024 * 16)
+        .and(warp::body::json())
+        .map(|doc: Document| doc)
+        .or_else(|rejection: Rejection| async move {
+            if let Some(error) = rejection.find::<warp::filters::body::BodyDeserializeError>() {
+                let message = error
+                    .to_string()
+                    .replace("Request body deserialize error: ", "")
+                    .replace(" at line 1 column 40", "");
+                Err(warp::reject::custom(JsonError { message }))
+            } else {
+                Err(rejection)
+            }
+        })
+        .boxed()
+}
 
 pub async fn handle_add_document(
     doc: Document,
@@ -28,7 +54,7 @@ pub async fn handle_add_document(
 }
 
 pub async fn handle_search(
-    params: HashMap<String, String>,
+    params: std::collections::HashMap<String, String>,
     engine: Arc<SearchEngine>,
 ) -> Result<impl Reply, Rejection> {
     let query = params.get("q").cloned().unwrap_or_default();
@@ -49,8 +75,8 @@ pub async fn handle_search(
 pub async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
     let (code, message, error_type) = if err.is_not_found() {
         (404, "Not Found".to_string(), "not_found")
-    } else if let Some(e) = err.find::<warp::filters::body::BodyDeserializeError>() {
-        (400, e.to_string(), "validation_error")
+    } else if let Some(e) = err.find::<JsonError>() {
+        (400, e.message.clone(), "validation_error")
     } else if err.find::<warp::reject::PayloadTooLarge>().is_some() {
         (413, "Payload too large".to_string(), "payload_too_large")
     } else {

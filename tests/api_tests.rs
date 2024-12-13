@@ -1,5 +1,4 @@
-use rust_search::api::handlers::{handle_add_document, handle_rejection, handle_search};
-use rust_search::api::middleware::json_body;
+use rust_search::api::handlers::{handle_add_document, handle_rejection, handle_search, json_body};
 use rust_search::common::config::Config;
 use rust_search::{Document, SearchEngine};
 use serde_json::json;
