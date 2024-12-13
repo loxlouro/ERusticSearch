@@ -77,19 +77,27 @@ async fn test_metadata_search() {
     let config = create_test_config();
     let engine = SearchEngine::new(&config).unwrap();
 
-    let mut doc = create_test_document("meta1", "Test document with test_category metadata");
+    let mut doc = create_test_document("meta1", "Test document with metadata");
     doc.metadata
         .insert("category".to_string(), "test_category".to_string());
 
     engine.add_document(doc).await.unwrap();
 
-    // TODO: Реализовать поиск по метаданным с синтаксисом category:value
-    let results = engine.search("test_category").await.unwrap();
+    let results = engine.search("category:test_category").await.unwrap();
     assert!(!results.is_empty());
     assert_eq!(
         results[0].metadata.get("category").unwrap(),
         "test_category"
     );
+
+    let results = engine
+        .search("metadata category:test_category")
+        .await
+        .unwrap();
+    assert!(!results.is_empty());
+
+    let results = engine.search("nonexistent_category:value").await.unwrap();
+    assert!(results.is_empty());
 }
 
 #[tokio::test]

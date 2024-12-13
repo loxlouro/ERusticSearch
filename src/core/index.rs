@@ -21,6 +21,7 @@ impl SearchIndex {
         let _content_field = schema_builder.add_text_field("content", TEXT | STORED);
         let _author_field = schema_builder.add_text_field("author", TEXT | STORED);
         let _type_field = schema_builder.add_text_field("type", TEXT | STORED);
+        let _category_field = schema_builder.add_text_field("category", TEXT | STORED);
         let schema = schema_builder.build();
 
         fs::create_dir_all(index_path)?;
@@ -63,10 +64,25 @@ impl SearchIndex {
     pub fn search(&self, query: &str) -> Result<Vec<String>> {
         let reader = self.index.reader()?;
         let searcher = reader.searcher();
-        let content_field = self.schema.get_field("content").unwrap();
 
-        let query_parser = tantivy::query::QueryParser::for_index(&self.index, vec![content_field]);
-        let query = query_parser.parse_query(query)?;
+        let mut query_parts = Vec::new();
+        let mut search_fields = vec![self.schema.get_field("content").unwrap()];
+
+        for part in query.split_whitespace() {
+            if let Some((field, value)) = part.split_once(':') {
+                if let Some(schema_field) = self.schema.get_field(field) {
+                    let field_query = format!("{}:{}", field, value);
+                    query_parts.push(field_query);
+                    search_fields.push(schema_field);
+                }
+            } else {
+                query_parts.push(part.to_string());
+            }
+        }
+
+        let query_str = query_parts.join(" ");
+        let query_parser = tantivy::query::QueryParser::for_index(&self.index, search_fields);
+        let query = query_parser.parse_query(&query_str)?;
 
         let top_docs = searcher.search(&query, &tantivy::collector::TopDocs::with_limit(10))?;
 
