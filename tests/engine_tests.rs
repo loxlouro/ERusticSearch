@@ -1,5 +1,5 @@
-use rust_search::config::Config;
-use rust_search::models::{Document, SearchEngine};
+use rust_search::common::config::Config;
+use rust_search::{Document, SearchEngine};
 use std::collections::HashMap;
 use tempfile::tempdir;
 
@@ -9,11 +9,11 @@ fn create_test_config() -> Config {
     let index_path = temp_dir.path().join("test_index");
 
     Config {
-        server: rust_search::config::ServerConfig {
+        server: rust_search::common::config::ServerConfig {
             host: "127.0.0.1".parse().unwrap(),
             port: 3030,
         },
-        storage: rust_search::config::StorageConfig {
+        storage: rust_search::common::config::StorageConfig {
             data_file: data_path.to_str().unwrap().to_string(),
             index_path: index_path.to_str().unwrap().to_string(),
         },

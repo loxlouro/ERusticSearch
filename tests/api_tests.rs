@@ -1,6 +1,7 @@
-use rust_search::config::Config;
-use rust_search::handlers::{handle_add_document, handle_rejection, handle_search, json_body};
-use rust_search::models::{Document, SearchEngine};
+use rust_search::api::handlers::{handle_add_document, handle_rejection, handle_search};
+use rust_search::api::middleware::json_body;
+use rust_search::common::config::Config;
+use rust_search::{Document, SearchEngine};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -14,11 +15,11 @@ pub fn create_test_config() -> Config {
     let index_path = temp_dir.path().join("test_index");
 
     Config {
-        server: rust_search::config::ServerConfig {
+        server: rust_search::common::config::ServerConfig {
             host: "127.0.0.1".parse().unwrap(),
             port: 3030,
         },
-        storage: rust_search::config::StorageConfig {
+        storage: rust_search::common::config::StorageConfig {
             data_file: data_path.to_str().unwrap().to_string(),
             index_path: index_path.to_str().unwrap().to_string(),
         },
