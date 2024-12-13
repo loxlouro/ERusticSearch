@@ -34,7 +34,11 @@ impl SearchIndex {
 
         fs::create_dir_all(&config.storage.index_path)?;
 
-        let index = Index::create_in_dir(&config.storage.index_path, schema.clone())?;
+        let index = match Index::open_in_dir(&config.storage.index_path) {
+            Ok(index) => index,
+            Err(_) => Index::create_in_dir(&config.storage.index_path, schema.clone())?,
+        };
+
         let writer = index.writer(50_000_000)?; // 50MB buffer
 
         Ok(SearchIndex {
